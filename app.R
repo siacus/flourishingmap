@@ -235,7 +235,7 @@ state_means[, stat_rescaled := {
       (stat_log - min_val) / (max_val - min_val)
     }
   } else {
-    centered <- stat_log - 1
+    centered <- stat_log - log(2)
     min_val <- min(centered, na.rm = TRUE)
     max_val <- max(centered, na.rm = TRUE)
     if (max_val == min_val) {
@@ -258,7 +258,7 @@ county_means[, stat_rescaled := {
       (stat_log - min_val) / (max_val - min_val)
     }
   } else {
-    centered <- stat_log - 1
+    centered <- stat_log - log(2)  # log(2)
     min_val <- min(centered, na.rm = TRUE)
     max_val <- max(centered, na.rm = TRUE)
     if (max_val == min_val) {
@@ -271,9 +271,9 @@ county_means[, stat_rescaled := {
 
 
 # → Now:
-# - stat_mean = 0 → stat_log_scaled = 1
-# - stat_mean < 0 → < 1
-# - stat_mean > 0 → > 1
+# - stat_mean = 0 → stat_log_scaled = log(2)
+# - stat_mean < 0 → < log(2)
+# - stat_mean > 0 → > log(2)
 
 
 # For state-level scale
