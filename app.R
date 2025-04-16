@@ -313,7 +313,10 @@ counties$GEOID <- sprintf("%05s", counties$GEOID)
 ui <- fluidPage(
   theme = bs_theme(bootswatch = "flatly"),
   useShinyjs(),
-  titlePanel("Flourishing Statistics Explorer"),
+  titlePanel(tagList(
+    "Flourishing Statistics Explorer",
+    tags$div("(numbers not final, use with care)", style = "font-size: 0.7em; color: grey;")
+  )),
   sidebarLayout(
     sidebarPanel(
       selectInput("geo_level", "Geographic Level", choices = c("State", "County")),
