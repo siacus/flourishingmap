@@ -38,11 +38,15 @@ library(plotly)
 
 # Load data
 state_data <- as.data.table(read_parquet("https://huggingface.co/datasets/siacus/flourishing/resolve/main/flourishingStateYear.parquet"))
+state_data <- state_data[year >= 2013]
 county_data <- as.data.table(read_parquet("https://huggingface.co/datasets/siacus/flourishing/resolve/main/flourishingCountyYear.parquet"))
+county_data <- county_data[year >= 2013]
 all_vars <- unique(state_data$variable)
+all_vars <- all_vars[!grepl("^q", all_vars)]
 all_years <- sort(unique(state_data$year))
 
 monthly_state_data <- as.data.table(read_parquet("https://huggingface.co/datasets/siacus/flourishing/resolve/main/flourishingStateMonth.parquet"))
+monthly_state_data <- monthly_state_data[year >= 2013]
 
 monthly_summary <- monthly_state_data[
   , .(
@@ -54,7 +58,6 @@ monthly_summary <- monthly_state_data[
   by = .(variable, year, month, date)
 ]
 
-library(plotly)
 
 plot_variable_timeseries_plotly <- function(dt, varname) {
   single_var <- dt[variable == varname]
