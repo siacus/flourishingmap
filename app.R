@@ -342,7 +342,8 @@ county_data[, stat_rescaled := {
   }
 }, by = .(variable, year)]
 
-# 
+# Not sure about the scale problem. I keep this code here for future reference
+
 # # Step 1: Compute mean(stat) by FIPS, variable, year
 # state_means <- state_data[, .(stat_mean = mean(stat, na.rm = TRUE)), by = .(FIPS, variable, year)]
 # county_means <- county_data[, .(stat_mean = mean(stat, na.rm = TRUE)), by = .(StateCounty, variable, year)]
