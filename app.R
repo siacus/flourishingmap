@@ -35,6 +35,7 @@ library(ggplot2)
 library(zoo)
 library(scales)
 library(plotly)
+library(lubridate)
 
 # Load data
 state_data <- as.data.table(read_parquet("https://huggingface.co/datasets/siacus/flourishing/resolve/main/flourishingStateYear.parquet"))
@@ -47,16 +48,8 @@ all_years <- sort(unique(state_data$year))
 
 monthly_state_data <- as.data.table(read_parquet("https://huggingface.co/datasets/siacus/flourishing/resolve/main/flourishingStateMonth.parquet"))
 monthly_state_data <- monthly_state_data[year >= 2013]
+monthly_state_data[, date := ceiling_date(ymd(paste(year, month, "01", sep = "-")), "month") - days(1)]
 
-monthly_summary <- monthly_state_data[
-  , .(
-    total_ntweets = sum(ntweets),
-    ntweets = sum(ntweets*salience),
-    salience = sum(salience * ntweets) / sum(ntweets),
-    stat = mean(stat ) 
-  ), 
-  by = .(variable, year, month, date)
-]
 
 
 plot_variable_timeseries_plotly <- function(dt, varname) {
@@ -68,7 +61,7 @@ plot_variable_timeseries_plotly <- function(dt, varname) {
   interpolated[, variable := varname]
   
   interpolated[, salience := na.approx(salience, date, na.rm = FALSE)]
-  interpolated[, total_ntweets := na.approx(total_ntweets, date, na.rm = FALSE)]
+  interpolated[, total_ntweets := na.approx(ntweets, date, na.rm = FALSE)]
   interpolated[, ntweets := na.approx(ntweets, date, na.rm = FALSE)]
   interpolated[, stat := na.approx(stat, date, na.rm = FALSE)]
   
@@ -220,15 +213,14 @@ var_info <- data.table(
     )
 )
 
-# Step 1: Compute mean(stat) by FIPS, variable, year
-state_means <- state_data[, .(stat_mean = mean(stat, na.rm = TRUE)), by = .(FIPS, variable, year)]
-county_means <- county_data[, .(stat_mean = mean(stat, na.rm = TRUE)), by = .(StateCounty, variable, year)]
+library(data.table)
 
-# Step 2: Conditional log transform
-state_means[, stat_log := ifelse(variable == "corruption", log(stat_mean + 1), log(stat_mean + 2))]
-county_means[, stat_log := ifelse(variable == "corruption", log(stat_mean + 1), log(stat_mean + 2))]
+# Step 1: Log transform based on variable
+state_data[, stat_log := ifelse(variable == "corruption", log(stat + 1), log(stat + 2))]
+county_data[, stat_log := ifelse(variable == "corruption", log(stat + 1), log(stat + 2))]
 
-state_means[, stat_rescaled := {
+# Step 2: Rescale per variable and year
+state_data[, stat_rescaled := {
   if (unique(variable) == "corruption") {
     min_val <- min(stat_log, na.rm = TRUE)
     max_val <- max(stat_log, na.rm = TRUE)
@@ -250,8 +242,7 @@ state_means[, stat_rescaled := {
 }, by = .(variable, year)]
 
 
-
-county_means[, stat_rescaled := {
+county_data[, stat_rescaled := {
   if (unique(variable) == "corruption") {
     min_val <- min(stat_log, na.rm = TRUE)
     max_val <- max(stat_log, na.rm = TRUE)
@@ -261,7 +252,7 @@ county_means[, stat_rescaled := {
       (stat_log - min_val) / (max_val - min_val)
     }
   } else {
-    centered <- stat_log - log(2)  # log(2)
+    centered <- stat_log - log(2)
     min_val <- min(centered, na.rm = TRUE)
     max_val <- max(centered, na.rm = TRUE)
     if (max_val == min_val) {
@@ -272,6 +263,59 @@ county_means[, stat_rescaled := {
   }
 }, by = .(variable, year)]
 
+# 
+# # Step 1: Compute mean(stat) by FIPS, variable, year
+# state_means <- state_data[, .(stat_mean = mean(stat, na.rm = TRUE)), by = .(FIPS, variable, year)]
+# county_means <- county_data[, .(stat_mean = mean(stat, na.rm = TRUE)), by = .(StateCounty, variable, year)]
+# 
+# # Step 2: Conditional log transform
+# state_means[, stat_log := ifelse(variable == "corruption", log(stat_mean + 1), log(stat_mean + 2))]
+# county_means[, stat_log := ifelse(variable == "corruption", log(stat_mean + 1), log(stat_mean + 2))]
+# 
+# state_means[, stat_rescaled := {
+#   if (unique(variable) == "corruption") {
+#     min_val <- min(stat_log, na.rm = TRUE)
+#     max_val <- max(stat_log, na.rm = TRUE)
+#     if (max_val == min_val) {
+#       rep(0, .N)
+#     } else {
+#       (stat_log - min_val) / (max_val - min_val)
+#     }
+#   } else {
+#     centered <- stat_log - log(2)
+#     min_val <- min(centered, na.rm = TRUE)
+#     max_val <- max(centered, na.rm = TRUE)
+#     if (max_val == min_val) {
+#       rep(0, .N)
+#     } else {
+#       2 * ((centered - min_val) / (max_val - min_val)) - 1
+#     }
+#   }
+# }, by = .(variable, year)]
+# 
+# 
+# 
+# county_means[, stat_rescaled := {
+#   if (unique(variable) == "corruption") {
+#     min_val <- min(stat_log, na.rm = TRUE)
+#     max_val <- max(stat_log, na.rm = TRUE)
+#     if (max_val == min_val) {
+#       rep(0, .N)
+#     } else {
+#       (stat_log - min_val) / (max_val - min_val)
+#     }
+#   } else {
+#     centered <- stat_log - log(2)  # log(2)
+#     min_val <- min(centered, na.rm = TRUE)
+#     max_val <- max(centered, na.rm = TRUE)
+#     if (max_val == min_val) {
+#       rep(0, .N)
+#     } else {
+#       2 * ((centered - min_val) / (max_val - min_val)) - 1
+#     }
+#   }
+# }, by = .(variable, year)]
+
 
 # → Now:
 # - stat_mean = 0 → stat_log_scaled = log(2)
@@ -279,20 +323,50 @@ county_means[, stat_rescaled := {
 # - stat_mean > 0 → > log(2)
 
 
-# For state-level scale
-stat_domains_state <- state_means[, .(
-  min_stat = min(stat_rescaled, na.rm = TRUE),
-  max_stat = max(stat_rescaled, na.rm = TRUE)
+# 
+# # For state-level scale domains
+# stat_domains_state <- state_data[, .(
+#   min_stat = min(stat_rescaled, na.rm = TRUE),
+#   max_stat = max(stat_rescaled, na.rm = TRUE)
+# ), by = .(variable, year)]
+# 
+# # For county-level scale domains
+# stat_domains_county <- county_data[, .(
+#   min_stat = min(stat_rescaled, na.rm = TRUE),
+#   max_stat = max(stat_rescaled, na.rm = TRUE)
+# ), by = .(variable, year)]
+
+
+# For state-level scale domains
+stat_domains_state <- state_data[, .(
+  min_stat = min(stat, na.rm = TRUE),
+  max_stat = max(stat, na.rm = TRUE)
 ), by = .(variable, year)]
 
-# For county-level scale
-stat_domains_county <- county_means[, .(
-  min_stat = min(stat_rescaled, na.rm = TRUE),
-  max_stat = max(stat_rescaled, na.rm = TRUE)
+# For county-level scale domains
+stat_domains_county <- county_data[, .(
+  min_stat = min(stat, na.rm = TRUE),
+  max_stat = max(stat, na.rm = TRUE)
 ), by = .(variable, year)]
 
-stat_domains_county
-stat_domains_state
+
+
+# 
+# 
+# # For state-level scale
+# stat_domains_state <- state_means[, .(
+#   min_stat = min(stat_rescaled, na.rm = TRUE),
+#   max_stat = max(stat_rescaled, na.rm = TRUE)
+# ), by = .(variable, year)]
+# 
+# # For county-level scale
+# stat_domains_county <- county_means[, .(
+#   min_stat = min(stat_rescaled, na.rm = TRUE),
+#   max_stat = max(stat_rescaled, na.rm = TRUE)
+# ), by = .(variable, year)]
+# 
+# stat_domains_county
+# stat_domains_state
 
 # Load shapefiles from local folder
 states <- st_read("data/states/cb_2021_us_state_20m.shp", quiet = TRUE)
@@ -352,7 +426,7 @@ server <- function(input, output, session) {
   
   ts_data <- reactive({
     req(input$var)
-    plot_variable_timeseries_plotly(monthly_summary, input$var)
+    plot_variable_timeseries_plotly(monthly_state_data, input$var)
   })
   
   output$timeseries_plot <- renderPlotly({
@@ -361,8 +435,57 @@ server <- function(input, output, session) {
   
   output$map <- renderPlot({
     map_data <- filtered_data()
+    
+    # Compute range and ±10% padding
+    stat_range <- range(map_data$stat, na.rm = TRUE)
+    padding <- 0.1 * diff(stat_range)
+    lower_limit <- stat_range[1] - padding
+    upper_limit <- stat_range[2] + padding
+    
+    # Start base plot
     p <- ggplot(map_data) +
-      geom_sf(aes(fill = stat_rescaled), color = "black", size = 0.2)
+      geom_sf(aes(fill = stat), color = "black", size = 0.2)
+    
+    # Choose scale based on variable type
+    if (input$var == "corruption") {
+      p <- p + scale_fill_gradient(
+        low = "white", high = "darkred", name = "Corruption",
+        limits = c(lower_limit, upper_limit),
+        na.value = "grey95"
+      )
+    } else {
+      midpoint <- 0
+      p <- p + scale_fill_gradient2(
+        low = "red", mid = "white", high = "blue", midpoint = midpoint,
+        limits = c(lower_limit, upper_limit),
+        name = input$var,
+        na.value = "grey95"
+      )
+    }
+    
+    # Add outer bounding box
+    bbox <- st_bbox(states)
+    p <- p + geom_rect(
+      aes(xmin = bbox["xmin"], xmax = bbox["xmax"],
+          ymin = bbox["ymin"], ymax = bbox["ymax"]),
+      fill = NA, color = "black", linewidth = 0.5
+    )
+    
+    # Final styling
+    p +
+      coord_sf(expand = FALSE) +
+      theme_minimal() +
+      theme(
+        aspect.ratio = 0.55,
+        legend.position = "right",
+        panel.grid = element_blank()
+      )
+  })
+  
+  output$map_old <- renderPlot({
+    map_data <- filtered_data()
+    p <- ggplot(map_data) +
+      geom_sf(aes(fill = stat), color = "black", size = 0.2)
     
     if (input$var == "corruption") {
       p <- p + scale_fill_gradient(low = "white", high = "darkred", name = "Corruption", 
@@ -396,11 +519,11 @@ server <- function(input, output, session) {
     req(input$var, input$year, input$geo_level)
     
     if (input$geo_level == "State") {
-      data <- state_means[variable == input$var & year == input$year]
+      data <- state_data[variable == input$var & year == input$year]
       data[, FIPS := sprintf("%02s", FIPS)]
       merged <- merge(states, data, by.x = "STATEFP", by.y = "FIPS", all.x = TRUE)
     } else {
-      data <- county_means[variable == input$var & year == input$year]
+      data <- county_data[variable == input$var & year == input$year]
       data[, StateCounty := sprintf("%05s", StateCounty)]
       merged <- merge(counties, data, by.x = "GEOID", by.y = "StateCounty", all.x = TRUE)
     }
