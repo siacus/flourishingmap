@@ -51,27 +51,34 @@ monthly_state_data <- monthly_state_data[year >= 2013]
 monthly_state_data[, date := ceiling_date(ymd(paste(year, month, "01", sep = "-")), "month") - days(1)]
 
 
-
-plot_variable_timeseries_plotly <- function(dt, varname) {
+plot_variable_timeseries_plotly <- function(dt, varname, presidents = FALSE, covid = FALSE) {
   single_var <- dt[variable == varname]
   single_var[, date := as.Date(date)]
   
+  # Fill missing dates
   full_dates <- data.table(date = seq(min(single_var$date), max(single_var$date), by = "month"))
   interpolated <- merge(full_dates, single_var, by = "date", all.x = TRUE)
   interpolated[, variable := varname]
   
+  # Interpolation
   interpolated[, salience := na.approx(salience, date, na.rm = FALSE)]
   interpolated[, total_ntweets := na.approx(ntweets, date, na.rm = FALSE)]
   interpolated[, ntweets := na.approx(ntweets, date, na.rm = FALSE)]
   interpolated[, stat := na.approx(stat, date, na.rm = FALSE)]
   
+  # Reshape for plotting
   plot_data <- melt(
     interpolated,
     id.vars = "date",
-    measure.vars = c("stat","salience"),
+    measure.vars = c("stat", "salience"),
     variable.name = "measure",
     value.name = "value"
   )
+  
+  min_date <- min(plot_data$date, na.rm = TRUE)
+  max_date <- max(plot_data$date, na.rm = TRUE)
+  label_y <- plot_data[, .(y = max(value, na.rm = TRUE)), by = measure]
+  label_y <- label_y[!is.infinite(y)]  # protect against empty or all NA
   
   p <- ggplot(plot_data, aes(x = date, y = value)) +
     geom_line(color = "steelblue", size = 1) +
@@ -86,8 +93,80 @@ plot_variable_timeseries_plotly <- function(dt, varname) {
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
-  ggplotly(p)  # ← Interactive version
+  # --- Add presidential annotations
+  if (presidents) {
+    pres_labels <- data.table(
+      label = c("Obama", "Trump", "Biden"),
+      start = as.Date(c("2009-01-20", "2017-01-20", "2021-01-20")),
+      end   = as.Date(c("2017-01-19", "2021-01-19", "2025-01-20"))
+    )
+    pres_labels <- pres_labels[start <= max_date & end >= min_date]
+    pres_labels[, start := pmax(start, min_date)]
+    pres_labels[, end := pmin(end, max_date)]
+    pres_labels[, mid := start + (end - start) / 2]
+    
+    if (nrow(pres_labels) > 0 && nrow(label_y) > 0) {
+      pres_text <- pres_labels[, .(mid, label)][
+        , .SD[rep(1:.N, each = nrow(label_y))]][
+          , measure := rep(label_y$measure, times = nrow(pres_labels))][
+            , y := rep(label_y$y, times = nrow(pres_labels))]
+      p <- p +
+        geom_vline(xintercept = as.numeric(pres_labels$start), linetype = "dashed", color = "red") +
+        geom_text(
+          data = pres_text,
+          aes(x = mid, y = y * 0.95, label = label),
+          inherit.aes = FALSE,
+          size = 3,
+          color = "red"
+        )
+    }
+  }
+  
+  # --- Add COVID annotation
+  if (covid) {
+    covid_start <- as.Date("2020-03-01")
+    covid_end <- as.Date("2022-02-28")  # You can adjust this if needed
+    
+    if (covid_start <= max_date && covid_end >= min_date) {
+      covid_start <- pmax(covid_start, min_date)
+      covid_end <- pmin(covid_end, max_date)
+      
+      mid1 <- min_date + (covid_start - min_date) / 2
+      mid2 <- covid_start + (covid_end - covid_start) / 2
+      mid3 <- covid_end + (max_date - covid_end) / 2
+      
+      covid_text <- data.table(
+        label = c("Pre-COVID-19", "COVID-19", "Post-COVID-19"),
+        x = c(mid1, mid2, mid3)
+      )
+    }
+    
+      if (nrow(label_y) > 0) {
+        # Expand covid_text over all measures
+        covid_text <- covid_text[!is.na(label)]
+        
+        covid_text <- covid_text[
+          , .SD[rep(1:.N, each = nrow(label_y))]][
+            , measure := rep(label_y$measure, times = nrow(covid_text))][
+              , y := rep(label_y$y, times = nrow(covid_text))]
+        p <- p +
+          geom_vline(xintercept = as.numeric(covid_start), linetype = "dotted", color = "blue") +
+          geom_vline(xintercept = as.numeric(covid_end), linetype = "dotted", color = "blue")
+        
+        p <- p + geom_text(
+            data = covid_text,
+            aes(x = x, y = y * 0.85, label = label),
+            inherit.aes = FALSE,
+            size = 3,
+            color = "blue"
+          )
+      }
+    }
+  
+  
+  ggplotly(p)
 }
+
 
 
 plot_variable_timeseries <- function(dt, varname) {
@@ -402,6 +481,8 @@ ui <- fluidPage(
                   min = min(all_years), max = max(all_years), value = min(all_years),
                   step = 1, animate = animationOptions(interval = 1500, loop = TRUE)
       ),
+      materialSwitch("presidents", "Show Presidential Terms", value = FALSE, status = "primary"),
+      materialSwitch("covid_switch", "COVID-19 Marker", value = FALSE),
       radioButtons("theme", "Theme", choices = c("Light", "Dark"), inline = TRUE),
       downloadButton("downloadData", "Download CSV"),
       downloadButton("downloadMap", "Download PNG")
@@ -426,7 +507,7 @@ server <- function(input, output, session) {
   
   ts_data <- reactive({
     req(input$var)
-    plot_variable_timeseries_plotly(monthly_state_data, input$var)
+    plot_variable_timeseries_plotly(monthly_state_data, input$var, presidents = input$presidents, covid = input$covid_switch)
   })
   
   output$timeseries_plot <- renderPlotly({
