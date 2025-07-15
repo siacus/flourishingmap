@@ -480,6 +480,15 @@ server <- function(input, output, session) {
         legend.position = "right",
         panel.grid = element_blank()
       )
+    
+    if (input$geo_level == "County") {
+      # Thin black borders for counties
+    #  p <- p + geom_sf(data = map_data, fill = NA, color = "black", size = 0.1)
+      
+      # Thicker black borders for state outlines
+      p <- p + geom_sf(data = states, fill = NA, color = "black", linewidth = 0.3)
+    }
+    p
   })
   
   output$map_old <- renderPlot({
