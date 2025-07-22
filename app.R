@@ -530,20 +530,38 @@ server <- function(input, output, session) {
     
     # Choose scale based on variable type
     if (input$var == "corruption") {
-      p <- p + scale_fill_gradient(
-        low = "white", high = "darkred", name = "Corruption",
+      corruption_colors <- viridisLite::viridis(100, option = "plasma")[51:100]
+      p <- p + scale_fill_gradientn(
+        colours = corruption_colors,
         limits = c(lower_limit, upper_limit),
-        na.value = "grey95"
+        name = "Corruption",
+        na.value = "grey90"
       )
     } else {
-      midpoint <- 0
-      p <- p + scale_fill_gradient2(
-        low = "red", mid = "white", high = "blue", midpoint = midpoint,
+      p <- p + scale_fill_viridis_c(
+        option = "plasma",
+        direction = 1,  # or -1 if you want flipped by default
+        na.value = "grey90",
         limits = c(lower_limit, upper_limit),
-        name = input$var,
-        na.value = "grey95"
+        name = input$var
       )
     }
+    # 
+    # if (input$var == "corruption") {
+    #   p <- p + scale_fill_gradient(
+    #     low = "white", high = "darkred", name = "Corruption",
+    #     limits = c(lower_limit, upper_limit),
+    #     na.value = "grey95"
+    #   )
+    # } else {
+    #   midpoint <- 0
+    #   p <- p + scale_fill_gradient2(
+    #     low = "red", mid = "white", high = "blue", midpoint = midpoint,
+    #     limits = c(lower_limit, upper_limit),
+    #     name = input$var,
+    #     na.value = "grey95"
+    #   )
+    # }
     
     # Add outer bounding box
     bbox <- st_bbox(states)
