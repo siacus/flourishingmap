@@ -37,6 +37,8 @@ library(scales)
 library(plotly)
 library(lubridate)
 
+options(bitmapType = "cairo")
+
 # Load data
 state_data <- as.data.table(read_parquet("https://huggingface.co/datasets/siacus/flourishing/resolve/main/flourishingStateYear.parquet"))
 state_data <- state_data[year >= 2013]
