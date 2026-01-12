@@ -37,3 +37,4 @@ Copy the file `.shiny_app.conf` in the same folderas well as the `data` director
 Point your browser to: `http://your_host_ip:3838/Flourishing/`
 
 
+
